@@ -41,16 +41,33 @@ class SharingTests: XCTestCase {
         let deleteExpectation = expectation(description: "Expect CloudKit to delete testing records")
 
         let deleteOperation = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: idsToDelete)
-        deleteOperation.modifyRecordsCompletionBlock = { _, idsDeleted, error in
-            deleteExpectation.fulfill()
 
-            if let error = error {
-                XCTFail("Error deleting temporary IDs: \(error.localizedDescription)")
-            } else {
-                XCTAssert(idsDeleted == self.idsToDelete, "IDs deleted did not match targeted IDs for deletion.")
+        var deletedIDs: [CKRecord.ID] = []
+
+        // Track each deletion to ensure all target records are successfully deleted.
+        deleteOperation.perRecordDeleteBlock = { id, result in
+            guard case .success = result else {
+                return
             }
 
-            self.idsToDelete = []
+            deletedIDs.append(id)
+        }
+
+        deleteOperation.modifyRecordsResultBlock = { result in
+            deleteExpectation.fulfill()
+
+            switch result {
+            case .failure(let error):
+                XCTFail("Error deleting temporary IDs: \(error.localizedDescription)")
+
+            case .success:
+                guard deletedIDs == self.idsToDelete else {
+                    XCTFail("Deleted IDs in tear down did not match idsToDelete.")
+                    return
+                }
+
+                self.idsToDelete = []
+            }
         }
 
         database.add(deleteOperation)

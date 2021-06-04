@@ -34,18 +34,20 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         debugPrint("Accepting CloudKit Share with metadata: \(cloudKitShareMetadata)")
 
-        operation.perShareCompletionBlock = { metadata, share, error in
+        operation.perShareResultBlock = { metadata, result in
             let rootRecordID = metadata.rootRecordID
 
-            if let error = error {
+            switch result {
+            case .failure(let error):
                 debugPrint("Error accepting share with root record ID: \(rootRecordID), \(error)")
-            } else {
+
+            case .success:
                 debugPrint("Accepted CloudKit share for root record ID: \(rootRecordID)")
             }
         }
 
-        operation.acceptSharesCompletionBlock = { error in
-            if let error = error {
+        operation.acceptSharesResultBlock = { result in
+            if case .failure(let error) = result {
                 debugPrint("Error accepting CloudKit Share: \(error)")
             }
         }

@@ -134,14 +134,13 @@ final class ViewModel: ObservableObject {
         let saveOperation = CKModifyRecordsOperation(recordsToSave: [contactRecord])
         saveOperation.savePolicy = .allKeys
 
-        saveOperation.modifyRecordsCompletionBlock = { recordsSaved, _, error in
+        saveOperation.modifyRecordsResultBlock = { result in
             DispatchQueue.main.async {
-                if let error = error {
-                    completionHandler(.failure(error))
+                if case .failure(let error) = result {
                     debugPrint("Error adding contact: \(error)")
-                } else {
-                    completionHandler(.success(()))
                 }
+
+                completionHandler(result)
             }
         }
 
@@ -157,12 +156,16 @@ final class ViewModel: ObservableObject {
         share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
 
         let operation = CKModifyRecordsOperation(recordsToSave: [contact.associatedRecord, share])
-        operation.modifyRecordsCompletionBlock = { (savedRecords, deletedRecordIDs, error) in
-            if let error = error {
-                completionHandler(.failure(error))
-                debugPrint("Error saving CKShare: \(error)")
-            } else {
-                completionHandler(.success((share, self.container)))
+        operation.modifyRecordsResultBlock = { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .failure(let error):
+                    debugPrint("Error saving CKShare: \(error)")
+                    completionHandler(.failure(error))
+
+                case .success:
+                    completionHandler(.success((share, self.container)))
+                }
             }
         }
 
@@ -187,14 +190,14 @@ final class ViewModel: ObservableObject {
                                                           configurationsByRecordZoneID: [:])
         var contacts: [Contact] = []
 
-        operation.recordChangedBlock = { record in
-            if record.recordType == "Contact", let contact = Contact(record: record) {
+        operation.recordWasChangedBlock = { _, result in
+            if let record = try? result.get(), record.recordType == "Contact", let contact = Contact(record: record) {
                 contacts.append(contact)
             }
         }
 
-        operation.fetchRecordZoneChangesCompletionBlock = { error in
-            if let error = error {
+        operation.fetchRecordZoneChangesResultBlock = { result in
+            if case .failure(let error) = result {
                 completionHandler(.failure(error))
             } else {
                 completionHandler(.success(contacts))
@@ -231,15 +234,17 @@ final class ViewModel: ObservableObject {
         }
 
         let createZoneOperation = CKModifyRecordZonesOperation(recordZonesToSave: [recordZone])
-        createZoneOperation.modifyRecordZonesCompletionBlock = { _, _, error in
-            if let error = error {
-                debugPrint("Error: Failed to create custom zone: \(error)")
-                completionHandler?(.failure(error))
-            } else {
-                DispatchQueue.main.async {
+        createZoneOperation.modifyRecordZonesResultBlock = { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .failure(let error):
+                    debugPrint("Error: Failed to create custom zone: \(error)")
+
+                case .success:
                     UserDefaults.standard.setValue(true, forKey: "isZoneCreated")
-                    completionHandler?(.success(()))
                 }
+
+                completionHandler?(result)
             }
         }
 
