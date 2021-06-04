@@ -7,6 +7,7 @@ import Foundation
 import CloudKit
 import OSLog
 
+@MainActor
 final class ViewModel: ObservableObject {
 
     // MARK: - State
@@ -20,7 +21,7 @@ final class ViewModel: ObservableObject {
     // MARK: - Properties
 
     /// State directly observable by our view.
-    @Published private(set) var state: State
+    @Published private(set) var state: State = .loading
     /// Use the specified iCloud container ID, which should also be present in the entitlements file.
     lazy var container = CKContainer(identifier: Config.containerIdentifier)
     /// This project uses the user's private database.
@@ -30,224 +31,150 @@ final class ViewModel: ObservableObject {
 
     // MARK: - Init
 
+    nonisolated init() {}
+
     /// Initializer to provide explicit state (e.g. for previews).
-    init(state: State = .loading) {
+    init(state: State) {
         self.state = state
     }
 
     // MARK: - API
 
-    /// Creates custom zone if needed and performs initial fetch afterwards.
-    func initialize(completionHandler: ((Result<Void, Error>) -> Void)? = nil) {
-        createZoneIfNeeded { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .failure(let error):
-                    self.state = .error(error)
-                    completionHandler?(.failure(error))
-
-                case .success:
-                    self.refresh()
-                    completionHandler?(.success(()))
-                }
-            }
+    /// Prepares container by creating custom zone if needed.
+    func initialize() async throws {
+        do {
+            try await createZoneIfNeeded()
+        } catch {
+            state = .error(error)
         }
     }
 
     /// Fetches contacts from the remote databases and updates local state.
-    func refresh() {
+    func refresh() async throws {
         state = .loading
-
-        fetchPrivateAndSharedContacts { result in
-            switch result {
-            case let .success((privateContacts, sharedContacts)):
-                self.state = .loaded(private: privateContacts, shared: sharedContacts)
-            case let .failure(error):
-                self.state = .error(error)
-            }
+        do {
+            let (privateContacts, sharedContacts) = try await fetchPrivateAndSharedContacts()
+            state = .loaded(private: privateContacts, shared: sharedContacts)
+        } catch {
+            state = .error(error)
         }
     }
 
-    /// Fetch private and shared Contacts from iCloud databases.
-    /// - Parameter completionHandler: Handler to process Contact results or error.
-    func fetchPrivateAndSharedContacts(
-        completionHandler: @escaping (Result<([Contact], [Contact]), Error>) -> Void
-    ) {
-        // Multiple operations are run asynchronously, storing results as they complete.
-        var privateContacts: [Contact]?
-        var sharedContacts: [Contact]?
-        var lastError: Error?
+    /// Fetches both private and shared contacts in parallel.
+    /// - Returns: A tuple containing separated private and shared contacts.
+    func fetchPrivateAndSharedContacts() async throws -> (private: [Contact], shared: [Contact]) {
+        // This will run each of these operations in parallel.
+        async let privateContacts = fetchContacts(scope: .private, in: [recordZone])
+        async let sharedContacts = fetchSharedContacts()
 
-        let group = DispatchGroup()
-
-        group.enter()
-        fetchContacts(scope: .private, in: [recordZone]) { result in
-            switch result {
-            case .success(let contacts):
-                privateContacts = contacts
-            case .failure(let error):
-                lastError = error
-            }
-
-            group.leave()
-        }
-
-        group.enter()
-        fetchSharedContacts { result in
-            switch result {
-            case .success(let contacts):
-                sharedContacts = contacts
-            case .failure(let error):
-                lastError = error
-            }
-
-            group.leave()
-        }
-
-        // When all asynchronous operations have completed, inform the completionHandler of the result.
-        group.notify(queue: .main) {
-            if let error = lastError {
-                completionHandler(.failure(error))
-            } else {
-                let privateContacts = privateContacts ?? []
-                let sharedContacts = sharedContacts ?? []
-                completionHandler(.success((privateContacts, sharedContacts)))
-            }
-        }
+        return (private: try await privateContacts, shared: try await sharedContacts)
     }
 
     /// Adds a new Contact to the database.
     /// - Parameters:
     ///   - name: Name of the Contact.
     ///   - phoneNumber: Phone number of the contact.
-    ///   - completionHandler: Handler to process success or error of the operation.
-    func addContact(
-        name: String,
-        phoneNumber: String,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
+    func addContact(name: String, phoneNumber: String) async throws {
         let id = CKRecord.ID(zoneID: recordZone.zoneID)
         let contactRecord = CKRecord(recordType: "Contact", recordID: id)
         contactRecord["name"] = name
         contactRecord["phoneNumber"] = phoneNumber
 
-        let saveOperation = CKModifyRecordsOperation(recordsToSave: [contactRecord])
-        saveOperation.savePolicy = .allKeys
-
-        saveOperation.modifyRecordsResultBlock = { result in
-            DispatchQueue.main.async {
-                if case .failure(let error) = result {
-                    debugPrint("Error adding contact: \(error)")
-                }
-
-                completionHandler(result)
-            }
-        }
-
-        database.add(saveOperation)
+        try await database.save(contactRecord)
     }
 
     /// Creates a `CKShare` and saves it to the private database in preparation to share a Contact with another user.
     /// - Parameters:
     ///   - contact: Contact to share.
     ///   - completionHandler: Handler to process a `success` or `failure` result.
-    func createShare(contact: Contact, completionHandler: @escaping (Result<(CKShare, CKContainer), Error>) -> Void) {
+    func createShare(contact: Contact) async throws -> (CKShare, CKContainer) {
         let share = CKShare(rootRecord: contact.associatedRecord)
         share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
 
-        let operation = CKModifyRecordsOperation(recordsToSave: [contact.associatedRecord, share])
-        operation.modifyRecordsResultBlock = { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .failure(let error):
-                    debugPrint("Error saving CKShare: \(error)")
-                    completionHandler(.failure(error))
+        _ = try await database.modifyRecords(saving: [contact.associatedRecord, share])
 
-                case .success:
-                    completionHandler(.success((share, self.container)))
-                }
-            }
-        }
-
-        database.add(operation)
+        return (share, container)
     }
 
     // MARK: - Private
 
-    /// Asynchronously fetches contacts for a given set of zones in a given database scope.
+    /// Fetches contacts for a given set of zones in a given database scope.
     /// - Parameters:
     ///   - scope: Database scope to fetch from.
     ///   - zones: Record zones to fetch contacts from.
-    ///   - completionHandler: Handler to process success or failure of operation.
+    /// - Returns: Combined set of contacts across all given zones.
     private func fetchContacts(
         scope: CKDatabase.Scope,
-        in zones: [CKRecordZone],
-        completionHandler: @escaping (Result<[Contact], Error>) -> Void
-    ) {
+        in zones: [CKRecordZone]
+    ) async throws -> [Contact] {
         let database = container.database(with: scope)
-        let zoneIDs = zones.map { $0.zoneID }
-        let operation = CKFetchRecordZoneChangesOperation(recordZoneIDs: zoneIDs,
-                                                          configurationsByRecordZoneID: [:])
-        var contacts: [Contact] = []
+        var allContacts: [Contact] = []
 
-        operation.recordWasChangedBlock = { _, result in
-            if let record = try? result.get(), record.recordType == "Contact", let contact = Contact(record: record) {
-                contacts.append(contact)
+        // Inner function retrieving and converting all Contact records for a single zone.
+        @Sendable func contactsInZone(_ zone: CKRecordZone) async throws -> [Contact] {
+            var allContacts: [Contact] = []
+
+            /// `recordZoneChanges` can return multiple consecutive changesets before completing, so
+            /// we use a loop to process multiple results if needed, indicated by the `moreComing` flag.
+            var awaitingChanges = true
+            /// After each loop, if more changes are coming, they are retrieved by using the `changeToken` property.
+            var nextChangeToken: CKServerChangeToken? = nil
+
+            while awaitingChanges {
+                let zoneChanges = try await database.recordZoneChanges(inZoneWith: zone.zoneID, since: nextChangeToken)
+                let contacts = zoneChanges.modificationResultsByID.values
+                    .compactMap { try? $0.get().record }
+                    .compactMap { Contact(record: $0) }
+                allContacts.append(contentsOf: contacts)
+
+                awaitingChanges = zoneChanges.moreComing
+                nextChangeToken = zoneChanges.changeToken
+            }
+
+            return allContacts
+        }
+
+        // Using this task group, fetch each zone's contacts in parallel.
+        try await withThrowingTaskGroup(of: [Contact].self) { group in
+            for zone in zones {
+                group.spawn {
+                    try await contactsInZone(zone)
+                }
+            }
+
+            // As each result comes back, append it to a combined array to finally return.
+            for try await contactsResult in group {
+                allContacts.append(contentsOf: contactsResult)
             }
         }
 
-        operation.fetchRecordZoneChangesResultBlock = { result in
-            if case .failure(let error) = result {
-                completionHandler(.failure(error))
-            } else {
-                completionHandler(.success(contacts))
-            }
-        }
-
-        database.add(operation)
+        return allContacts
     }
 
     /// Fetches all shared Contacts from all available record zones.
-    /// - Parameter completionHandler: Handler to process success or failure.
-    private func fetchSharedContacts(completionHandler: @escaping (Result<[Contact], Error>) -> Void) {
-        // The first step is to fetch all available record zones in user's shared database.
-        container.sharedCloudDatabase.fetchAllRecordZones { zones, error in
-            if let error = error {
-                completionHandler(.failure(error))
-            } else if let zones = zones, !zones.isEmpty {
-                // Fetch all Contacts in the set of zones in the shared database.
-                self.fetchContacts(scope: .shared, in: zones, completionHandler: completionHandler)
-            } else {
-                // Zones nil or empty so no shared contacts.
-                completionHandler(.success([]))
-            }
+    private func fetchSharedContacts() async throws -> [Contact] {
+        let sharedZones = try await container.sharedCloudDatabase.allRecordZones()
+        guard !sharedZones.isEmpty else {
+            return []
         }
+
+        return try await fetchContacts(scope: .shared, in: sharedZones)
     }
 
     /// Creates the custom zone in use if needed.
-    /// - Parameter completionHandler: An optional completion handler to track operation completion or errors.
-    private func createZoneIfNeeded(completionHandler: ((Result<Void, Error>) -> Void)? = nil) {
+    private func createZoneIfNeeded() async throws {
         // Avoid the operation if this has already been done.
         guard !UserDefaults.standard.bool(forKey: "isZoneCreated") else {
-            completionHandler?(.success(()))
             return
         }
 
-        let createZoneOperation = CKModifyRecordZonesOperation(recordZonesToSave: [recordZone])
-        createZoneOperation.modifyRecordZonesResultBlock = { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .failure(let error):
-                    debugPrint("Error: Failed to create custom zone: \(error)")
-
-                case .success:
-                    UserDefaults.standard.setValue(true, forKey: "isZoneCreated")
-                }
-
-                completionHandler?(result)
-            }
+        do {
+            _ = try await database.modifyRecordZones(saving: [recordZone])
+        } catch {
+            print("ERROR: Failed to create custom zone: \(error.localizedDescription)")
+            throw error
         }
 
-        database.add(createZoneOperation)
+        UserDefaults.standard.setValue(true, forKey: "isZoneCreated")
     }
 }

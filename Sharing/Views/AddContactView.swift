@@ -12,7 +12,7 @@ struct AddContactView: View {
     @State private var phoneInput: String = ""
 
     /// Callback after user selects to add contact with given name and phone number.
-    let onAdd: ((String, String) -> Void)?
+    let onAdd: ((String, String) async throws -> Void)?
     /// Callback after user cancels.
     let onCancel: (() -> Void)?
 
@@ -32,7 +32,7 @@ struct AddContactView: View {
                     Button("Cancel", action: { onCancel?() })
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: { onAdd?(nameInput, phoneInput) })
+                    Button("Save", action: { async { try? await onAdd?(nameInput, phoneInput) } })
                         .disabled(nameInput.isEmpty || phoneInput.isEmpty)
                 }
             }

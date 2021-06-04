@@ -27,7 +27,7 @@ struct ContentView: View {
                 .navigationTitle("Contacts")
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button { vm.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                        Button { async { try await vm.refresh() } } label: { Image(systemName: "arrow.clockwise") }
                     }
                     ToolbarItem(placement: .navigationBarLeading) {
                         progressView
@@ -37,7 +37,12 @@ struct ContentView: View {
                     }
                 }
         }
-        .onAppear { vm.initialize() }
+        .onAppear {
+            async {
+                try await vm.initialize()
+                try await vm.refresh()
+            }
+        }
         .sheet(isPresented: $isAddingContact, content: {
             AddContactView(onAdd: addContact, onCancel: { isAddingContact = false })
         })
@@ -108,7 +113,7 @@ struct ContentView: View {
             }
             if shareable {
                 Spacer()
-                Button(action: { shareContact(contact) }, label: { Image(systemName: "square.and.arrow.up") }).buttonStyle(BorderlessButtonStyle())
+                Button(action: { async { try? await shareContact(contact) } }, label: { Image(systemName: "square.and.arrow.up") }).buttonStyle(BorderlessButtonStyle())
                     .sheet(isPresented: $isSharing, content: { shareView() })
             }
         }
@@ -116,29 +121,23 @@ struct ContentView: View {
 
     // MARK: - Actions
 
-    private func addContact(name: String, phoneNumber: String) {
-        vm.addContact(name: name, phoneNumber: phoneNumber) { _ in
-            isAddingContact = false
-        }
+    private func addContact(name: String, phoneNumber: String) async throws {
+        try await vm.addContact(name: name, phoneNumber: phoneNumber)
+        try await vm.refresh()
+        isAddingContact = false
     }
 
-    private func shareContact(_ contact: Contact) {
+    private func shareContact(_ contact: Contact) async throws {
         isProcessingShare = true
 
-        vm.createShare(contact: contact) { result in
+        do {
+            let (share, container) = try await vm.createShare(contact: contact)
             isProcessingShare = false
-
-            switch result {
-            case let .failure(error):
-                debugPrint("Error sharing contact record: \(error)")
-
-            case let .success((share, container)):
-                DispatchQueue.main.async {
-                    activeContainer = container
-                    activeShare = share
-                    isSharing = true
-                }
-            }
+            activeShare = share
+            activeContainer = container
+            isSharing = true
+        } catch {
+            debugPrint("Error sharing contact record: \(error)")
         }
     }
 }
