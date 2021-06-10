@@ -37,6 +37,7 @@ struct ContentView: View {
                     }
                 }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
         .onAppear { vm.initialize() }
         .sheet(isPresented: $isAddingContact, content: {
             AddContactView(onAdd: addContact, onCancel: { isAddingContact = false })
