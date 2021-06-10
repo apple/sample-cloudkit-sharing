@@ -1,5 +1,7 @@
 # CloudKit Samples: Sharing
 
+⚠️ For the new Swift 5.5 concurrency APIs, see the [swift-concurrency](tree/swift-concurrency) branch ⚠️
+
 ### Goals
 
 This project demonstrates sharing CloudKit records across user accounts. It shows how to initiate a share from one user account, and accept the share and subsequently view shared data on another account.
