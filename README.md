@@ -1,6 +1,6 @@
 # CloudKit Samples: Sharing
 
-⚠️ For the new Swift 5.5 concurrency APIs, see the [tree/swift-concurrency](swift-concurrency) branch ⚠️
+⚠️ For the new Swift 5.5 concurrency APIs, see the [swift-concurrency](tree/swift-concurrency) branch ⚠️
 
 ### Goals
 
