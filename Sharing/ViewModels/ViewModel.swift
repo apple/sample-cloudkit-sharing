@@ -9,6 +9,12 @@ import OSLog
 
 final class ViewModel: ObservableObject {
 
+    // MARK: - Error
+
+    enum ViewModelError: Error {
+        case unknown
+    }
+
     // MARK: - State
 
     enum State {
@@ -153,20 +159,33 @@ final class ViewModel: ObservableObject {
     ///   - contact: Contact to share.
     ///   - completionHandler: Handler to process a `success` or `failure` result.
     func createShare(contact: Contact, completionHandler: @escaping (Result<(CKShare, CKContainer), Error>) -> Void) {
-        let share = CKShare(rootRecord: contact.associatedRecord)
-        share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
+        guard let existingShare = contact.associatedRecord.share else {
+            let share = CKShare(rootRecord: contact.associatedRecord)
+            share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
 
-        let operation = CKModifyRecordsOperation(recordsToSave: [contact.associatedRecord, share])
-        operation.modifyRecordsCompletionBlock = { (savedRecords, deletedRecordIDs, error) in
-            if let error = error {
-                completionHandler(.failure(error))
-                debugPrint("Error saving CKShare: \(error)")
-            } else {
-                completionHandler(.success((share, self.container)))
+            let operation = CKModifyRecordsOperation(recordsToSave: [contact.associatedRecord, share])
+            operation.modifyRecordsCompletionBlock = { (savedRecords, deletedRecordIDs, error) in
+                if let error = error {
+                    completionHandler(.failure(error))
+                    debugPrint("Error saving CKShare: \(error)")
+                } else {
+                    completionHandler(.success((share, self.container)))
+                }
             }
+
+            database.add(operation)
+            return
         }
 
-        database.add(operation)
+        database.fetch(withRecordID: existingShare.recordID) { (share, error) in
+            if let error = error {
+                completionHandler(.failure(error))
+            } else if let share = share as? CKShare {
+                completionHandler(.success((share, self.container)))
+            } else {
+                completionHandler(.failure(ViewModelError.unknown))
+            }
+        }
     }
 
     // MARK: - Private
