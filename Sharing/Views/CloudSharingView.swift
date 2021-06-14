@@ -8,7 +8,7 @@ import SwiftUI
 import UIKit
 import CloudKit
 
-/// This struct wraps a `UIImagePickerController` for use in SwiftUI.
+/// This struct wraps a `UICloudSharingController` for use in SwiftUI.
 struct CloudSharingView: UIViewControllerRepresentable {
 
     // MARK: - Properties
