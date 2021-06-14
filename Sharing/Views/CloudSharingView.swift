@@ -8,7 +8,7 @@ import SwiftUI
 import UIKit
 import CloudKit
 
-/// This struct wraps a `UIImagePickerController` for use in SwiftUI.
+/// This struct wraps a `UICloudSharingController` for use in SwiftUI.
 struct CloudSharingView: UIViewControllerRepresentable {
 
     // MARK: - Properties
@@ -25,6 +25,7 @@ struct CloudSharingView: UIViewControllerRepresentable {
         let sharingController = UICloudSharingController(share: share, container: container)
         sharingController.availablePermissions = [.allowReadWrite, .allowPrivate]
         sharingController.delegate = context.coordinator
+        sharingController.modalPresentationStyle = .formSheet
         return sharingController
     }
 
