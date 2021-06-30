@@ -131,7 +131,7 @@ struct ContentView: View {
         isProcessingShare = true
 
         do {
-            let (share, container) = try await vm.createShare(contact: contact)
+            let (share, container) = try await vm.fetchOrCreateShare(contact: contact)
             isProcessingShare = false
             activeShare = share
             activeContainer = container

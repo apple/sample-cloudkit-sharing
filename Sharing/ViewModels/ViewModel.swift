@@ -10,6 +10,12 @@ import OSLog
 @MainActor
 final class ViewModel: ObservableObject {
 
+    // MARK: - Error
+
+    enum ViewModelError: Error {
+        case invalidRemoteShare
+    }
+
     // MARK: - State
 
     enum State {
@@ -83,15 +89,21 @@ final class ViewModel: ObservableObject {
         try await database.save(contactRecord)
     }
 
-    /// Creates a `CKShare` and saves it to the private database in preparation to share a Contact with another user.
+    /// Fetches an existing `CKShare` on a Contact record, or creates a new one in preparation to share a Contact with another user.
     /// - Parameters:
     ///   - contact: Contact to share.
     ///   - completionHandler: Handler to process a `success` or `failure` result.
-    func createShare(contact: Contact) async throws -> (CKShare, CKContainer) {
-        let share = CKShare(rootRecord: contact.associatedRecord)
-        share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
+    func fetchOrCreateShare(contact: Contact) async throws -> (CKShare, CKContainer) {
+        guard let existingShare = contact.associatedRecord.share else {
+            let share = CKShare(rootRecord: contact.associatedRecord)
+            share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
+            _ = try await database.modifyRecords(saving: [contact.associatedRecord, share])
+            return (share, container)
+        }
 
-        _ = try await database.modifyRecords(saving: [contact.associatedRecord, share])
+        guard let share = try await database.record(for: existingShare.recordID) as? CKShare else {
+            throw ViewModelError.invalidRemoteShare
+        }
 
         return (share, container)
     }
