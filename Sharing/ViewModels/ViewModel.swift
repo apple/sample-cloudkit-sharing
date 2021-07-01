@@ -12,7 +12,7 @@ final class ViewModel: ObservableObject {
     // MARK: - Error
 
     enum ViewModelError: Error {
-        case unknown
+        case invalidRemoteShare
     }
 
     // MARK: - State
@@ -183,7 +183,7 @@ final class ViewModel: ObservableObject {
             } else if let share = share as? CKShare {
                 completionHandler(.success((share, self.container)))
             } else {
-                completionHandler(.failure(ViewModelError.unknown))
+                completionHandler(.failure(ViewModelError.invalidRemoteShare))
             }
         }
     }
