@@ -154,11 +154,11 @@ final class ViewModel: ObservableObject {
         database.add(saveOperation)
     }
 
-    /// Creates a `CKShare` and saves it to the private database in preparation to share a Contact with another user.
+    /// Fetches an existing `CKShare` on a Contact record, or creates a new one in preparation to share a Contact with another user.
     /// - Parameters:
     ///   - contact: Contact to share.
     ///   - completionHandler: Handler to process a `success` or `failure` result.
-    func createShare(contact: Contact, completionHandler: @escaping (Result<(CKShare, CKContainer), Error>) -> Void) {
+    func fetchOrCreateShare(contact: Contact, completionHandler: @escaping (Result<(CKShare, CKContainer), Error>) -> Void) {
         guard let existingShare = contact.associatedRecord.share else {
             let share = CKShare(rootRecord: contact.associatedRecord)
             share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"

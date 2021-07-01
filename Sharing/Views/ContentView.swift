@@ -125,7 +125,7 @@ struct ContentView: View {
     private func shareContact(_ contact: Contact) {
         isProcessingShare = true
 
-        vm.createShare(contact: contact) { result in
+        vm.fetchOrCreateShare(contact: contact) { result in
             isProcessingShare = false
 
             switch result {
