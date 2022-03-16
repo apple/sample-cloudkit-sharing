@@ -15,7 +15,7 @@ class SharingTests: XCTestCase {
     // MARK: - Setup & Tear Down
 
     override func setUp() {
-        let expectation = self.expectation(description: "Expect ViewModel initizliation completed")
+        let expectation = self.expectation(description: "Expect ViewModel initialization completed")
 
         viewModel.initialize { result in
             expectation.fulfill()
