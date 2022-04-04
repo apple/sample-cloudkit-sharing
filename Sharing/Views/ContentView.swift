@@ -27,7 +27,7 @@ struct ContentView: View {
                 .navigationTitle("Contacts")
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button { async { try await vm.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                        Button { Task { try await vm.refresh() } } label: { Image(systemName: "arrow.clockwise") }
                     }
                     ToolbarItem(placement: .navigationBarLeading) {
                         progressView
@@ -38,7 +38,7 @@ struct ContentView: View {
                 }
         }
         .onAppear {
-            async {
+            Task {
                 try await vm.initialize()
                 try await vm.refresh()
             }
@@ -113,7 +113,7 @@ struct ContentView: View {
             }
             if shareable {
                 Spacer()
-                Button(action: { async { try? await shareContact(contact) } }, label: { Image(systemName: "square.and.arrow.up") }).buttonStyle(BorderlessButtonStyle())
+                Button(action: { Task { try? await shareContact(contact) } }, label: { Image(systemName: "square.and.arrow.up") }).buttonStyle(BorderlessButtonStyle())
                     .sheet(isPresented: $isSharing, content: { shareView() })
             }
         }

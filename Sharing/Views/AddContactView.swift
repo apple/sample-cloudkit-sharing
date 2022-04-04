@@ -32,7 +32,7 @@ struct AddContactView: View {
                     Button("Cancel", action: { onCancel?() })
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: { async { try? await onAdd?(nameInput, phoneInput) } })
+                    Button("Save", action: { Task { try? await onAdd?(nameInput, phoneInput) } })
                         .disabled(nameInput.isEmpty || phoneInput.isEmpty)
                 }
             }

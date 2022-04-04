@@ -97,7 +97,7 @@ final class ViewModel: ObservableObject {
         guard let existingShare = contact.associatedRecord.share else {
             let share = CKShare(rootRecord: contact.associatedRecord)
             share[CKShare.SystemFieldKey.title] = "Contact: \(contact.name)"
-            _ = try await database.modifyRecords(saving: [contact.associatedRecord, share])
+            _ = try await database.modifyRecords(saving: [contact.associatedRecord, share], deleting: [])
             return (share, container)
         }
 
@@ -149,7 +149,7 @@ final class ViewModel: ObservableObject {
         // Using this task group, fetch each zone's contacts in parallel.
         try await withThrowingTaskGroup(of: [Contact].self) { group in
             for zone in zones {
-                group.spawn {
+                group.addTask {
                     try await contactsInZone(zone)
                 }
             }
@@ -181,7 +181,7 @@ final class ViewModel: ObservableObject {
         }
 
         do {
-            _ = try await database.modifyRecordZones(saving: [recordZone])
+            _ = try await database.modifyRecordZones(saving: [recordZone], deleting: [])
         } catch {
             print("ERROR: Failed to create custom zone: \(error.localizedDescription)")
             throw error
