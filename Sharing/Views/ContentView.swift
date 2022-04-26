@@ -37,6 +37,7 @@ struct ContentView: View {
                     }
                 }
         }
+        .navigationViewStyle(.stack)
         .onAppear {
             Task {
                 try await vm.initialize()
