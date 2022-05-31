@@ -1,14 +1,12 @@
 # CloudKit Samples: Sharing
 
-⚠️ For the new Swift 5.5 concurrency APIs, see the `swift-concurrency` branch ⚠️
-
 ### Goals
 
 This project demonstrates sharing CloudKit records across user accounts. It shows how to initiate a share from one user account, and accept the share and subsequently view shared data on another account.
 
 ### Prerequisites
 
-* A Mac with [Xcode 12](https://developer.apple.com/xcode/) (or later) installed is required to build and test this project.
+* A Mac with [Xcode 13](https://developer.apple.com/xcode/) (or later) installed is required to build and test this project.
 * An active [Apple Developer Program membership](https://developer.apple.com/support/compare-memberships/) is needed to create a CloudKit container.
 
 ### Setup Instructions
@@ -38,6 +36,10 @@ This project demonstrates sharing CloudKit records across user accounts. It show
 * The link initiates a prompt on the user’s device to accept the share, which launches the Sharing app and accepts the share through a database operation defined in SceneDelegate’s `userDidAcceptCloudKitShareWith` delegate callback.
 
 * After the share is accepted and the UI is refreshed, the shared Contact will display in User Two’s Contacts list in the “Shared” section. `fetchSharedContacts(completionHandler:)` in ViewModel.swift shows how Contacts in shared database zones are fetched.
+
+### Note on Swift Concurrency
+
+This project uses Swift concurrency APIs. A prior `completionHandler`-based implementation has been tagged [`pre-async`](/tree/pre-async).
 
 ### Further Reading
 
