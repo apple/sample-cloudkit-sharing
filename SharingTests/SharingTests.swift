@@ -17,15 +17,9 @@ class SharingTests: XCTestCase {
     override func setUp() {
         let expectation = self.expectation(description: "Expect ViewModel initialization completed")
 
-        viewModel.initialize { result in
+        Task {
+            try await viewModel.initialize()
             expectation.fulfill()
-
-            switch result {
-            case .failure(let error):
-                XCTFail("Error during VM initialization: \(error)")
-            case .success:
-                break
-            }
         }
 
         waitForExpectations(timeout: 10)
@@ -40,80 +34,56 @@ class SharingTests: XCTestCase {
         let database = container.privateCloudDatabase
         let deleteExpectation = expectation(description: "Expect CloudKit to delete testing records")
 
-        let deleteOperation = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: idsToDelete)
-        deleteOperation.modifyRecordsCompletionBlock = { _, idsDeleted, error in
+        Task {
+            _ = try await database.modifyRecords(saving: [], deleting: idsToDelete)
+            idsToDelete = []
             deleteExpectation.fulfill()
-
-            if let error = error {
-                XCTFail("Error deleting temporary IDs: \(error.localizedDescription)")
-            } else {
-                XCTAssert(idsDeleted == self.idsToDelete, "IDs deleted did not match targeted IDs for deletion.")
-            }
-
-            self.idsToDelete = []
         }
-
-        database.add(deleteOperation)
 
         waitForExpectations(timeout: 10, handler: nil)
     }
 
     // MARK: - CloudKit Readiness
 
-    func test_CloudKitReadiness() throws {
+    func test_CloudKitReadiness() async throws {
         // Fetch zones from the Private Database of the CKContainer for the current user to test for valid/ready state
         let container = CKContainer(identifier: Config.containerIdentifier)
         let database = container.privateCloudDatabase
 
-        let fetchExpectation = expectation(description: "Expect CloudKit fetch to complete")
-        database.fetchAllRecordZones { _, error in
-            if let error = error as? CKError {
-                switch error.code {
-                case .badContainer, .badDatabase:
-                    XCTFail("Create or select a CloudKit container in this app target's Signing & Capabilities in Xcode")
+        do {
+            _ = try await database.allRecordZones()
+        } catch let error as CKError {
+            switch error.code {
+            case .badContainer, .badDatabase:
+                XCTFail("Create or select a CloudKit container in this app target's Signing & Capabilities in Xcode")
 
-                case .permissionFailure, .notAuthenticated:
-                    XCTFail("Simulator or device running this app needs a signed-in iCloud account")
+            case .permissionFailure, .notAuthenticated:
+                XCTFail("Simulator or device running this app needs a signed-in iCloud account")
 
-                default:
-                    XCTFail("CKError: \(error)")
-                }
+            default:
+                XCTFail("CKError: \(error)")
             }
-            fetchExpectation.fulfill()
         }
-
-        waitForExpectations(timeout: 10)
     }
 
     // MARK: - CKShare Creation
 
-    func testCreatingShare() {
-        let expectation = self.expectation(description: "Expect sequence of creating CKShare to complete")
+    func testCreatingShare() async throws {
+        // Create a temporary contact to create the share on.
+        try await createTestContact()
+        // Fetch private contacts, which should now contain the temporary contact.
+        let privateContacts = try await fetchPrivateContacts()
 
-        createTestContact {
-            self.fetchPrivateContacts { contacts in
-                guard let testContact = contacts.first(where: { $0.name == self.testContactName }) else {
-                    XCTFail("No matching test Contact found after fetching private contacts")
-                    expectation.fulfill()
-                    return
-                }
-
-                self.idsToDelete.append(testContact.associatedRecord.recordID)
-
-                self.viewModel.createShare(contact: testContact) { result in
-                    switch result {
-                    case .failure(let error):
-                        XCTFail("Failed to create share on test Contact: \(error)")
-                    case .success((let share, _)):
-                        self.idsToDelete.append(share.recordID)
-                    }
-
-                    expectation.fulfill()
-                }
-            }
+        guard let testContact = privateContacts.first(where: { $0.name == self.testContactName }) else {
+            XCTFail("No matching test Contact found after fetching private contacts")
+            return
         }
 
-        waitForExpectations(timeout: 15)
+        idsToDelete.append(testContact.associatedRecord.recordID)
+
+        let (share, _) = try await viewModel.fetchOrCreateShare(contact: testContact)
+
+        idsToDelete.append(share.recordID)
     }
 
     // MARK: - Helpers
@@ -124,28 +94,13 @@ class SharingTests: XCTestCase {
     }()
 
     /// Simple function to create and save a new `Contact` to test with. Immediately fails on any error.
-    /// - Parameter completion: Handler called on completion.
-    private func createTestContact(completion: @escaping () -> Void) {
-        viewModel.addContact(name: testContactName, phoneNumber: "555-123-4567") { result in
-            if case .failure(let error) = result {
-                XCTFail("Error creating test contact: \(error)")
-            }
-
-            completion()
-        }
+    private func createTestContact() async throws {
+        try await viewModel.addContact(name: testContactName, phoneNumber: "555-123-4567")
     }
 
     /// Uses the ViewModel to fetch only private contacts. Immediately fails on any error.
     /// - Parameter completion: Handler called on completion.
-    private func fetchPrivateContacts(completion: @escaping ([Contact]) -> Void) {
-        viewModel.fetchPrivateAndSharedContacts { result in
-            switch result {
-            case .failure(let error):
-                XCTFail("Error creating test contact: \(error)")
-                completion([])
-            case .success((let privateContacts, _)):
-                completion(privateContacts)
-            }
-        }
+    private func fetchPrivateContacts() async throws -> [Contact] {
+        try await viewModel.fetchPrivateAndSharedContacts().private
     }
 }
