@@ -17,7 +17,7 @@ class SharingTests: XCTestCase {
     override func setUp() {
         let expectation = self.expectation(description: "Expect ViewModel initizliation completed")
 
-        async {
+        Task {
             try await viewModel.initialize()
             expectation.fulfill()
         }
@@ -34,8 +34,8 @@ class SharingTests: XCTestCase {
         let database = container.privateCloudDatabase
         let deleteExpectation = expectation(description: "Expect CloudKit to delete testing records")
 
-        async {
-            _ = try await database.modifyRecords(deleting: idsToDelete)
+        Task {
+            _ = try await database.modifyRecords(saving: [], deleting: idsToDelete)
             idsToDelete = []
             deleteExpectation.fulfill()
         }
@@ -81,7 +81,7 @@ class SharingTests: XCTestCase {
 
         idsToDelete.append(testContact.associatedRecord.recordID)
 
-        let (share, _) = try await viewModel.createShare(contact: testContact)
+        let (share, _) = try await viewModel.fetchOrCreateShare(contact: testContact)
 
         idsToDelete.append(share.recordID)
     }
