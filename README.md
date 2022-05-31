@@ -39,7 +39,7 @@ This project demonstrates sharing CloudKit records across user accounts. It show
 
 ### Note on Swift Concurrency
 
-This project uses Swift concurrency APIs. A prior `completionHandler`-based implementation has been tagged [`pre-async`](/tree/pre-async).
+This project uses Swift concurrency APIs. A prior `completionHandler`-based implementation has been tagged [`pre-async`](https://github.com/apple/cloudkit-sample-sharing/blob/main/tree/pre-async).
 
 ### Further Reading
 
