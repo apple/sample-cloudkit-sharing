@@ -82,11 +82,16 @@ final class ViewModel: ObservableObject {
     ///   - phoneNumber: Phone number of the contact.
     func addContact(name: String, phoneNumber: String) async throws {
         let id = CKRecord.ID(zoneID: recordZone.zoneID)
-        let contactRecord = CKRecord(recordType: "Contact", recordID: id)
+        let contactRecord = CKRecord(recordType: "SharedContact", recordID: id)
         contactRecord["name"] = name
         contactRecord["phoneNumber"] = phoneNumber
 
-        try await database.save(contactRecord)
+        do {
+            try await database.save(contactRecord)
+        } catch {
+            debugPrint("ERROR: Failed to save new Contact: \(error)")
+            throw error
+        }
     }
 
     /// Fetches an existing `CKShare` on a Contact record, or creates a new one in preparation to share a Contact with another user.
